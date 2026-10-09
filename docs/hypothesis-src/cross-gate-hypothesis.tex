@@ -1,0 +1,199 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs,array}
+\usepackage{enumitem}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{tcolorbox}
+\usepackage{titlesec}
+\usepackage[colorlinks=true,linkcolor=NavyBlue,urlcolor=NavyBlue]{hyperref}
+\setlength{\tabcolsep}{7pt}
+\setlist{itemsep=2pt,topsep=4pt}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.6em}{}
+\theoremstyle{plain}
+\newtheorem{prop}{Proposition}
+\newtheorem{cor}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{rem}{Remark}
+\newcommand{\IR}{\mathrm{IR}}
+\newcommand{\Dp}{\mathrm{D}}
+\newcommand{\CE}{\mathrm{CE}}
+\newcommand{\R}{\mathbb{R}}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\newtcolorbox{status}[1][]{colback=black!4,colframe=black!35,boxrule=0.5pt,left=6pt,right=6pt,top=4pt,bottom=4pt,fonttitle=\bfseries,#1}
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries Cross-gate fusion: a formal analysis,\\[2pt] and what the evidence does and does not support}\\[8pt]
+Melih Talha Bekta\c{s} \quad\textperiodcentered\quad \"Usk\"udar University\\[2pt]
+\small Companion to \emph{Beyond Early and Late Fusion: A 3-Stage Cross-Gate Architecture for Small-Model HAR}\\
+\small CUHK-X Challenge Grand Finals, Small Model Track, Shanghai, 12 October 2026
+\end{center}
+\vspace{4pt}
+
+\begin{status}[title=Status of this document]
+Sections 1--6 are mathematics and arithmetic that can be checked: every identity in Sections~2--3 was also verified numerically (finite differences, Appendix~A), and every number in Sections~5--6 is computed from \texttt{results/per\_stage\_accuracy.csv}. Section~7 states hypotheses and the experiments that would decide them; most of those experiments have \textbf{not been run}. Section~8 is a \textbf{draft} of the philosophical reading and is not yet approved by the author. Nothing here claims that the gate causes the observed gains.
+\end{status}
+
+\begin{abstract}
+\noindent Two video networks, one fed infrared (IR) clips and one fed depth clips, exchange information through a pair of zero-initialised linear maps and are trained in three stages. End to end, averaging the two outputs beat the plain average of two independent models by $+2.2$ points on average over six backbones (4 of 6 positive); training only the gate and heads gave $+0.5$ (2 of 6). We analyse what the architecture can express. At the logit level each branch is a linear classifier on the concatenated features $[f;g]$, so with frozen backbones the gate adds no representational capacity over two concatenation heads; it changes the starting point, the optimisation geometry and the coupling of gradients. Evidence combination is additive in $f$ and $g$, so any interaction between modalities can arise only through feature learning in Stage~3. The data are compatible with a modest effect and with none: the six per-backbone differences have a $t$-statistic of $1.75$ (Stage~3) and $0.32$ (Stage~2). We list the controls that would separate the gate from extra training, head retraining, selection on the validation set and run-to-run noise.
+\end{abstract}
+
+\section{Setting and notation}
+
+A clip is a pair $x=(x_\IR,x_\Dp)$ with label $y\in\{1,\dots,K\}$, $K=40$. Two backbones of the same architecture map the clips to features
+\[
+f=\varphi_\IR(x_\IR)\in\R^d,\qquad g=\varphi_\Dp(x_\Dp)\in\R^d,
+\]
+with $d\in\{512,768,1024\}$ for the six torchvision backbones used, so $d\ge K$ throughout. Heads are affine, $W_1,W_2\in\R^{K\times d}$, $b_1,b_2\in\R^K$. The \emph{cross-gate} is
+\begin{equation}
+\tilde f=f+Ag,\qquad \tilde g=g+Bf,\qquad A,B\in\R^{d\times d}\ \text{(no bias)},\quad A=B=0\ \text{at initialisation,}
+\label{eq:gate}
+\end{equation}
+and the model produces \emph{two} sets of logits and no single fused vector:
+\begin{align}
+z_1&=W_1\tilde f+b_1, & z_2&=W_2\tilde g+b_2, & p_k&=\softmax(z_k),\\
+\hat y&=\argmax_c\ \tfrac12\bigl(p_1+p_2\bigr)_c, & L&=\CE(p_1,y)+\CE(p_2,y).
+\end{align}
+Write $e_y$ for the one-hot label vector. Training has three stages of 25 epochs: \textbf{S1}, two independent models ($A=B=0$ fixed; this is the late-fusion baseline); \textbf{S2}, backbones frozen, $A,B$ and the heads trained, heads initialised from S1; \textbf{S3}, everything trained. The ``fusion'' number at every stage is the same operation, the average of two softmax outputs.
+
+\section{The gate is a factorised linear map}
+
+\begin{prop}[Logit identity]\label{prop:logit}
+$z_1=W_1f+(W_1A)\,g+b_1$ and $z_2=W_2g+(W_2B)\,f+b_2$. Each branch is therefore an affine classifier of the concatenated vector $[f;g]\in\R^{2d}$ whose weight on $f$ is $W_1$ and whose weight on $g$ is the product $V_1:=W_1A\in\R^{K\times d}$.
+\end{prop}
+\noindent\emph{Proof.} Expand $W_1(f+Ag)+b_1$. \hfill$\square$
+
+\begin{prop}[Capacity with frozen backbones]\label{prop:cap}
+Suppose $\rank W_1=K$ (true generically when $d\ge K$). For every $V\in\R^{K\times d}$ there is $A\in\R^{d\times d}$ with $W_1A=V$, namely $A=W_1^{+}V$ with $W_1^{+}=W_1^\top(W_1W_1^\top)^{-1}$. Hence in Stage~2, where $f,g$ are fixed and $W_1,W_2$ are trained together with $A,B$, the set of functions the gated model can realise equals the set realised by two \emph{concatenation heads}
+\[
+z_1=W_1'f+V_1g+b_1,\qquad z_2=W_2'g+V_2f+b_2 ,
+\]
+with $W_k',V_k$ free.
+\end{prop}
+\noindent\emph{Proof.} $W_1W_1^{+}=I_K$, so $W_1(W_1^{+}V)=V$. The reverse inclusion is Proposition~\ref{prop:logit}. \hfill$\square$
+
+\paragraph{What this means.}
+(i)~In Stage~2 the gate gives \emph{no representational advantage} over feeding $[f;g]$ to a linear classifier. Any Stage-2 difference between the gated model and a concatenation head must come from where optimisation starts, how it travels, or what is implicitly regularised, not from something the concatenation head cannot represent. (ii)~This makes a concatenation head on frozen features the natural \emph{early-fusion} control for Stage~2. The title of the poster promises a comparison with early fusion; that control has not been run. (iii)~Logits are \emph{additive} in $f$ and $g$. The model can sum evidence from the two sensors but cannot express an interaction such as ``trust IR only when depth shows X''. Interaction can enter only through the features themselves, that is, through Stage~3. This sharpens the word ``complementary'': what Stage~2 can test is \emph{additive} complementarity.
+
+\begin{prop}[Preconditioned dynamics]\label{prop:precond}
+For per-sample gradient flow on $A$ alone, with $W_1,f,g$ fixed, $V_1=W_1A$ obeys
+\[
+\dot V_1=-\,W_1W_1^\top\,(p_1-e_y)\,g^\top .
+\]
+Training $V_1$ directly would give $\dot V_1=-(p_1-e_y)g^\top$. The gate therefore performs gradient descent on the concatenation weights preconditioned by the positive semidefinite matrix $W_1W_1^\top$, which is a descent direction but a different one.
+\end{prop}
+\noindent\emph{Proof.} From Proposition~\ref{prop:grad} below, $\dot A=-W_1^\top(p_1-e_y)g^\top$; multiply by $W_1$. \hfill$\square$
+
+\noindent The statement is for plain gradient flow. The experiments use AdamW, which rescales per parameter, so it is only a guide to why the parametrisation could matter; it is not a proof that it does. AdamW's weight decay also acts on $A$ and not on $V_1$, a second, implicit difference.
+
+\section{Gradients and the coupling between branches}
+
+\begin{prop}[Gate gradients]\label{prop:grad}
+For one sample, with $r_k:=p_k-e_y$,
+\[
+\frac{\partial L}{\partial A}=W_1^\top r_1\,g^\top,\qquad
+\frac{\partial L}{\partial B}=W_2^\top r_2\,f^\top,
+\]
+\[
+\frac{\partial L}{\partial f}=W_1^\top r_1+B^\top W_2^\top r_2,\qquad
+\frac{\partial L}{\partial g}=A^\top W_1^\top r_1+W_2^\top r_2 .
+\]
+\end{prop}
+\noindent\emph{Proof.} $\partial\,\CE(p_1,y)/\partial z_1=r_1$, $\partial z_1/\partial\tilde f=W_1$, $\tilde f=f+Ag$ gives $\partial\tilde f/\partial A$ contributing $W_1^\top r_1g^\top$; the branch-2 loss reaches $f$ only through $\tilde g=g+Bf$. \hfill$\square$
+
+\begin{cor}[Zero initialisation is not a saddle]
+At $A=B=0$ the gradients are $W_1^\top r_1g^\top$ and $W_2^\top r_2f^\top$. These vanish only if $g=0$, $f=0$ or $r_k\in\ker W_k^\top$. With $\rank W_k=K$ the kernel is trivial and $r_k\neq0$ for any finite logits, so the gradient is non-zero on every sample. The initial step reduces the loss (checked numerically). The usual saddle at the origin of a two-factor product does not arise because only one factor ($A$) starts at zero while the head $W_1$ does not.
+\end{cor}
+
+\paragraph{Coupling.} Stage~1 has $\partial L/\partial f=W_1^\top r_1$: the IR backbone is trained only by its own loss. In Stage~3 it is also trained by the depth loss through the term $B^\top W_2^\top r_2$, and symmetrically for the depth backbone. So Stage~3 is the first stage in which each backbone receives a learning signal defined by the \emph{other} branch's error. This is the mechanism one would point to if the Stage-3 gain were due to the gate. It is also the reason Stage~3 cannot be compared with Stage~1 without a control: Stage~3 differs from Stage~1 in coupling, in 25 further epochs of training, and in head and gate parameters, all at once.
+
+\section{What each stage isolates}
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.15}\begin{tabular}{@{}p{1.2cm}>{\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}p{7.2cm}@{}}\toprule
+Stage & What changes relative to the previous stage & What a difference can \emph{not} be attributed to without a control\\\midrule
+S1 & two independent models; plain average & --- (baseline)\\
+S2 & $A,B$ and heads trained on frozen features; each branch sees $[f;g]$ (Prop.~\ref{prop:cap}) & the gate as opposed to head retraining and epoch selection (Control A); the gate as opposed to concatenation heads (Control C)\\
+S3 & backbones trained; cross-gradients (Prop.~\ref{prop:grad}) & the gate as opposed to 25 more epochs (Control B); the cross-gradient as opposed to extra capacity (cross-term ablation)\\\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Averaging, diversity and the oracle}
+
+Let $c_\IR,c_\Dp,c_{\mathrm{avg}}\in\{0,1\}$ indicate whether each branch and the averaged output classify a clip correctly. The \emph{oracle} accuracy $\mathbb E[c_\IR\vee c_\Dp]$ is an upper bound on any rule that chooses between the two branch predictions per clip, and \emph{headroom} is oracle minus averaged accuracy. Table~\ref{tab:gap} gives, per backbone and stage, the gap between branch accuracies, the oracle, and the headroom.
+
+\begin{table}[h]\centering\small
+\input{tab_gap.tex}
+\caption{Branch gap $|a_\IR-a_\Dp|$, oracle accuracy, and headroom (oracle minus averaged accuracy), all in percentage points on the 628 validation clips. S1/S2/S3 are the three stages.}\label{tab:gap}
+\end{table}
+
+\paragraph{A prediction that Proposition~\ref{prop:cap} makes, and the data's answer.}
+After Stage~2 both branches see the same information $[f;g]$ and differ only in head parameters and initialisation. If both branches approach the same classifier, their accuracies should converge and their errors should become more alike. The table agrees: the mean gap falls from $5.4$ points (S1) to $1.9$ (S2) and $3.1$ (S3), and the mean oracle falls from $65.2$ to $63.9$ (S2) and $64.3$ (S3), in 5 of 6 backbones at both stages (the exception is \texttt{s3d}). Headroom shrinks from $7.6$ to $5.8$ and $4.5$, but mostly because the oracle falls, not because the average rises.
+
+This gives a reading of the earlier observation that the weaker branch (depth) rises by $+4.1$ points and the stronger branch (IR) falls by $-1.6$ after Stage~2. It is what convergence of two classifiers to a common input predicts. It does not require, and does not by itself indicate, that the gate ``moves information from the strong sensor to the weak one''. The plain average of two independent models already sits $4.9$ points above the weaker model and $0.45$ below the stronger one before any gate exists.
+
+\paragraph{A tension worth stating.} Giving both branches both sensors adds information to each (good for each branch) and removes diversity between them (bad for an average of two). Whether the net effect is positive is an empirical question and depends on the backbone; \texttt{s3d}, the only backbone whose oracle rises, is also the one with the largest gain. A model-level reading would be that the gate helps most where one branch is poor enough that sharing the other's features is worth more than the lost diversity.
+
+\section{What the data support}
+
+\begin{table}[h]\centering\small
+\input{tab_delta.tex}
+\caption{Accuracy of the plain average (Stage~1) and changes from it, in points. ``Best single'' is the better of the two Stage-1 branches.}\label{tab:delta}
+\end{table}
+
+\paragraph{Summary.} Stage~2: mean $+0.45$, median $-0.5$, 2 of 6 positive. Stage~3: mean $+2.18$, median $+1.8$, 4 of 6 positive. Against the best single Stage-1 model, Stage~3 is $+1.7$ on average, 5 of 6 positive.
+
+\paragraph{How large is that relative to noise?} One accuracy on $N=628$ clips has a standard error $\sqrt{a(1-a)/N}\approx 2.0$ points near $60\%$. Treating the six per-backbone differences as a sample: Stage~3 has mean $2.18$, standard deviation $3.04$, standard error $1.24$, $t=1.75$ on 5 degrees of freedom (two-sided $p\approx0.14$); a two-sided sign test on $4/6$ gives $p\approx0.69$. Stage~2 has $t=0.32$ ($p\approx0.76$). The six backbones share the same validation clips, the same pretraining dataset and the same selection rule, so they are not six independent experiments and these $p$-values are, if anything, optimistic. Without \texttt{s3d} the Stage-3 mean falls to $+1.2$ and the Stage-2 mean to $-0.9$. The honest summary is: a positive tendency in Stage~3, not established at conventional levels, and no evidence in Stage~2.
+
+\paragraph{Selection.} At every stage the kept epoch maximises the mean of the two \emph{branch} accuracies on the validation clips, the same clips the results are reported on. It is the same rule at each stage, so it does not favour one stage by design, but it makes every reported number optimistic by an amount that is not measured, and the amount may differ between stages. The remedy is to choose the epoch on a subject-wise split of the training data and report the validation subjects once.
+
+\section{Hypotheses and how they could fail}
+
+Write $\Delta_k$ for the paired change in averaged-output accuracy from Stage~1. The rules below are proposals; they should be fixed \emph{before} the runs.
+
+\begin{description}[leftmargin=1.2cm,style=nextline]
+\item[H1 (head retraining, not gate).] The Stage-2 changes are explained by retraining the heads and selecting the best epoch. \emph{Decided by Control A}: Stage~2 with $A=B=0$ frozen, same schedule and selection. If the gated minus control difference is within the noise of repeated seeds, H1 stands. (Code written; no results recorded.)
+\item[H2 (training length, not coupling).] The Stage-3 gain is explained by 25 further epochs. \emph{Decided by Control B}: Stage~3 with $A=B=0$ frozen, which keeps the backbones independent. If Control B recovers the gain within noise, H2 stands. (Not written. The author reports that a version was run but no numbers are available to this document.)
+\item[H3 (no better than early fusion).] On frozen features the gate performs like a concatenation head (Prop.~\ref{prop:cap}). \emph{Decided by Control C}: linear heads on $[f;g]$, with the same optimiser and selection. A gate that does not beat Control C has not been shown to add anything over early fusion at the feature level.
+\item[H4 (modality-specific).] The gain needs two \emph{different} sensors. \emph{Decided by Control D}: IR with IR, depth with depth, same architecture. If the gain survives, it is a regularisation or ensembling effect, not complementarity.
+\item[H5 (noise).] The differences are within run-to-run variation. \emph{Decided by $\ge5$ seeds per configuration}, reporting the spread of $\Delta_k$ per backbone and a bootstrap over clips \emph{and} seeds.
+\end{description}
+
+\paragraph{When would we say the gate works?} Only if (a) against the matched control (A for Stage~2, B for Stage~3) the seed-averaged paired difference is positive on most backbones with an interval that excludes zero, (b) Stage~2 also beats Control C, and (c) the result holds with the epoch chosen outside the validation subjects. Anything weaker is reported as ``a tendency''. Failed controls stay in the record.
+
+\paragraph{What this document does not do.} It does not explain \emph{why} depth is the weaker sensor here, whether the representation of person and movement is entangled with the sensor, or whether the gate changes what is encoded rather than how it is combined. Those require probing experiments (for example, probing identity and action from $f$ and $\tilde f$) that have not been done.
+
+\section{A philosophical reading \textnormal{\small(draft, for the author's approval)}}
+
+\paragraph{An experiment tests a conjunction.} A run that returns $+2.2$ points tests at once that the code is right, that the data split means what we think, that training was not accidentally longer, that the epoch choice was neutral, and that the gate matters. When the number is positive it is tempting to credit the last item, the one we care about. The controls above are a way of removing the other conjuncts one at a time. Until they are removed, the correct statement is about the conjunction.
+
+\paragraph{Three levels of claim.} (1)~\emph{There is an effect}: the system scores higher than a baseline. (2)~\emph{The effect is due to the proposed component}: removing it removes the effect. (3)~\emph{The component works by the proposed mechanism}: information that one sensor lacks is supplied by the other. Each level needs strictly more than the one before it. The present evidence sits, tentatively, at level 1 for Stage~3 and below level 1 for Stage~2. The poster is worded accordingly.
+
+\paragraph{Complementarity is an assumption, not an observation.} The design assumes that IR and depth carry different information about the same action. Section~2 shows that the architecture can test one version of that, additive complementarity, and not the stronger version, interaction, unless the features themselves are retrained. Section~5 shows that giving each branch both sensors can reduce diversity between branches, which is the opposite of complementarity at the level of errors. A hypothesis that predicts its own possible failure is better than one that can absorb any outcome: here, a gate that equals a concatenation head, or a gain that survives a same-modality partner, would count against the story.
+
+\paragraph{Separating, compensating, erasing.} The work began with the aim of separating one factor of a representation (the person and movement) from another (the sensor) after, and then during, training. The two attempts to erase the dependence, a decoder after training and gradient reversal during it, did not work, and that is informative only under assumptions about what those methods can do. The cross-gate takes the opposite stance: rather than removing what a sensor lacks, let another sensor compensate. Section~2 shows what such compensation amounts to in the simplest case, a linear reweighting of one branch by the other. Whether a deeper form of compensation exists, one that no concatenation head could mimic, is exactly what Stage~3 and Control~B are meant to ask.
+
+\paragraph{Keeping the record honest.} Negative and inconclusive runs belong on the same table as the positive ones. A correction already made to an earlier summary (an apparent asymmetric gain that was an averaging effect) is kept next to the history for the same reason.
+
+\medskip
+\noindent\emph{To be written in the author's own words:} what was believed before the first experiment and which beliefs the experiments overturned; why separate or compensate rather than erase; what would have to be seen to say the gate does what it was first thought to do.
+
+\appendix
+\section{Numerical verification}
+A script (\texttt{docs/verify\_math.py} in the repository, NumPy only) draws random $f,g,W_k,b_k,A,B$ with $d=64$, $K=40$ and checks, at both $A=B=0$ and at random $A,B$:
+\begin{itemize}
+\item Proposition~\ref{prop:logit}: $\max|z_1-(W_1f+W_1Ag+b_1)|=4\times10^{-16}$.
+\item Proposition~\ref{prop:grad}: analytic gradients for $A$, $B$, $f$, $g$ against central finite differences ($h=10^{-6}$); the largest discrepancy over all entries is $8\times10^{-10}$, against gradient entries as large as $0.7$.
+\item Proposition~\ref{prop:cap}: $\rank[W_1,\;W_1A]=40$, and for a random target $V$ the solution $A=W_1^{+}V$ gives $\max|W_1A-V|=8\times10^{-15}$.
+\item Corollary 1 (zero initialisation): a gradient step on $A$ from $A=0$ lowers the loss on the sample ($5.904\to5.850$ for a step of $10^{-3}$).
+\end{itemize}
+These checks are of the algebra, not of the experiments. The statistics in Section~6 are computed from the results file in the repository.
+
+\end{document}

@@ -1,0 +1,9 @@
+arch,stage1_plain_avg_correct,stage2_gate_then_avg_correct,stage3_gate_then_avg_correct,stage1_best_single_correct,stage2_minus_stage1_pts,stage3_minus_stage1_pts,stage2_minus_best_single_pts,stage3_minus_best_single_pts
+r2plus1d_18,372,374,364,380,0.32,-1.27,-0.96,-2.55
+r3d_18,371,364,371,362,-1.11,0.0,0.32,1.43
+mc3_18,302,296,325,317,-0.96,3.66,-3.34,1.27
+s3d,285,330,329,286,7.17,7.01,7.01,6.85
+mvit_v2_s,458,458,478,467,0.0,3.18,-1.43,1.75
+swin3d_t,382,365,385,375,-2.71,0.48,-1.59,1.59
+MEAN,,,,,0.45,2.18,0.00,1.73
+MEDIAN,,,,,-0.48,1.83,,

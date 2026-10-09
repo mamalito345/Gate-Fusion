@@ -1,0 +1,8 @@
+arch,best_stage1_rule,best_stage1_rule_acc,stage3_gate_then_avg_acc,diff_pts
+r2plus1d_18,learned_alpha_loso,0.6067,0.5796,-2.71
+r3d_18,product_of_experts,0.5924,0.5908,-0.16
+mc3_18,learned_alpha_loso,0.5127,0.5175,0.48
+s3d,product_of_experts,0.4650,0.5239,5.89
+mvit_v2_s,learned_alpha_loso,0.7468,0.7611,1.43
+swin3d_t,product_of_experts,0.6258,0.6131,-1.27
+mean,,,,0.61

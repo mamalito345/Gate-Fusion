@@ -1,0 +1,16 @@
+# Never commit data or weights
+*.pt
+*.pth
+*.ckpt
+*.npz
+*.zip
+*.z0*
+*.7z
+Training/
+Testing/
+train_extracted/
+HAR/
+# Python / notebook noise
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
